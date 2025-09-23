@@ -1,0 +1,35 @@
+# TenbinCache DNS Proxy Server Test Configuration
+#
+# Test-specific configuration that uses dynamic port allocation
+# to avoid port conflicts during parallel test execution.
+
+# Proxy server configuration for tests
+proxy:
+  # Port 0 means allocate any available port dynamically
+  port: 0
+
+  # Use localhost as upstream for testing
+  upstream: "127.0.0.1"
+
+  # Standard DNS port for upstream
+  upstream_port: 53
+
+  # Shorter timeout for faster tests
+  timeout: 2000
+
+  # Reduced retries for faster test execution
+  max_retries: 1
+
+  # Disable caching in tests for predictable behavior
+  cache_enabled: false
+
+  # Cache TTL (not used when caching is disabled)
+  cache_ttl: 60
+
+# Server configuration for tests
+server:
+  # Enable packet dumping for test debugging if needed
+  packet_dump: false
+
+  # Test dump directory
+  dump_dir: "test/dump"

@@ -1,0 +1,38 @@
+# TenbinCache DNS Proxy Server Configuration
+#
+# This configuration file defines the behavior of the TenbinCache DNS proxy server,
+# which provides transparent DNS packet forwarding to upstream servers while
+# preserving ADDITIONAL sections and other DNS response data.
+#
+# Usage: mix run --no-halt
+
+# Proxy server configuration
+proxy:
+  # Port to listen on for DNS queries
+  port: 5353
+
+  # Upstream DNS server to forward queries to
+  upstream: "8.8.8.8"
+
+  # Upstream DNS server port
+  upstream_port: 53
+
+  # Timeout for upstream queries (milliseconds)
+  timeout: 5000
+
+  # Maximum number of retry attempts for upstream queries
+  max_retries: 2
+
+  # Enable response caching to reduce upstream queries
+  cache_enabled: true
+
+  # Cache TTL in seconds (only used if cache_enabled is true)
+  cache_ttl: 300
+
+# Server configuration
+server:
+  # Enable packet dumping for debugging
+  packet_dump: false
+
+  # Directory to save packet dumps (only used if packet_dump is true)
+  dump_dir: "log/dump"
