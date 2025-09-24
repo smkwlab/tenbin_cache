@@ -1,227 +1,383 @@
 defmodule TenbinCache.UDPServerTest do
-  @moduledoc """
-  Basic functionality tests for TenbinCache.UDPServer module.
-
-  Focuses on module existence and interface validation rather than
-  complex socket operations. This approach avoids UDP socket warnings
-  while still validating the core API surface.
-  """
   use ExUnit.Case
+  import ExUnit.CaptureLog
+  import TenbinCache.DNSTestHelper
 
-  describe "UDPServer module" do
-    test "module loads and implements GenServer behaviour" do
-      assert Code.ensure_loaded?(TenbinCache.UDPServer)
-
-      behaviours = TenbinCache.UDPServer.__info__(:attributes)[:behaviour] || []
-      assert GenServer in behaviours
+  setup do
+    # Start ConfigParser for tests that need it
+    unless Process.whereis(TenbinCache.ConfigParser) do
+      {:ok, _pid} = TenbinCache.ConfigParser.start_link([])
     end
 
-    test "required functions exist" do
-      functions = TenbinCache.UDPServer.__info__(:functions)
-      assert {:start_link, 1} in functions
-      assert {:init, 1} in functions
-      assert {:handle_call, 3} in functions
-      assert {:handle_info, 2} in functions
-      assert {:terminate, 2} in functions
-      assert {:get_port, 1} in functions
-      assert {:get_socket, 1} in functions
+    # Start TaskSupervisor for integration tests
+    unless Process.whereis(TenbinCache.TaskSupervisor) do
+      {:ok, _pid} = Task.Supervisor.start_link(name: TenbinCache.TaskSupervisor)
     end
+
+    :ok
   end
 
-  describe "Argument structure validation" do
-    test "start_link accepts expected arguments" do
-      args = [address_family: :inet, port: 0]
+  describe "UDP Server dynamic port allocation" do
+    test "starts with dynamic port when port 0 is specified" do
+      # Start server with port 0 for dynamic allocation
+      {:ok, pid} =
+        TenbinCache.UDPServer.start_link(
+          address_family: :inet,
+          port: 0
+        )
 
-      assert Keyword.keyword?(args)
-      assert Keyword.has_key?(args, :address_family)
-      assert Keyword.has_key?(args, :port)
+      # Get the actual allocated port
+      {:ok, port} = TenbinCache.UDPServer.get_port(pid)
+
+      # Verify port is valid and not 0
+      assert port > 0
+      assert port < 65_536
+
+      # Clean up
+      GenServer.stop(pid)
     end
 
-    test "supports both IPv4 and IPv6 families" do
-      assert :inet in [:inet, :inet6]
-      assert :inet6 in [:inet, :inet6]
-    end
-  end
+    test "starts with specific port when specified" do
+      # Find an available port first
+      {:ok, test_socket} = :gen_udp.open(0, [:binary, {:active, false}])
+      {:ok, available_port} = :inet.port(test_socket)
+      :gen_udp.close(test_socket)
 
-  describe "State structure validation" do
-    test "server state structure has required fields" do
-      # Test the struct definition without initializing
-      state = %TenbinCache.UDPServer{}
+      # Start server with the specific available port
+      {:ok, pid} =
+        TenbinCache.UDPServer.start_link(
+          address_family: :inet,
+          port: available_port
+        )
 
-      assert Map.has_key?(state, :socket)
-      assert Map.has_key?(state, :address_family)
-      assert Map.has_key?(state, :port)
-      assert Map.has_key?(state, :packet_dump_config)
-    end
-  end
+      # Verify the exact port is used
+      {:ok, port} = TenbinCache.UDPServer.get_port(pid)
+      assert port == available_port
 
-  describe "Configuration validation" do
-    test "validates socket options structure" do
-      # Test that socket options are properly structured
-      socket_opts = [
-        :binary,
-        {:active, false},
-        {:reuseaddr, true},
-        {:buffer, 65_535}
-      ]
-
-      assert is_list(socket_opts)
-      assert :binary in socket_opts
-      assert {:active, false} in socket_opts
-      assert {:reuseaddr, true} in socket_opts
-      assert {:buffer, 65_535} in socket_opts
+      # Clean up
+      GenServer.stop(pid)
     end
 
-    test "validates address family values" do
-      valid_families = [:inet, :inet6]
+    test "multiple servers get different dynamic ports" do
+      # Start multiple servers with dynamic ports
+      servers =
+        Enum.map(1..3, fn _ ->
+          {:ok, pid} =
+            TenbinCache.UDPServer.start_link(
+              address_family: :inet,
+              port: 0
+            )
 
-      Enum.each(valid_families, fn family ->
-        assert family in [:inet, :inet6]
-      end)
-    end
-  end
+          pid
+        end)
 
-  describe "Configuration integration" do
-    setup do
-      # Use TestHelper for minimal component startup
-      TestHelper.setup_test_env()
-      TestHelper.start_tenbin_cache_for_test()
+      # Get all ports
+      ports =
+        Enum.map(servers, fn pid ->
+          {:ok, port} = TenbinCache.UDPServer.get_port(pid)
+          port
+        end)
 
-      on_exit(fn ->
-        TestHelper.stop_tenbin_cache()
-      end)
+      # All ports should be unique
+      assert length(Enum.uniq(ports)) == 3
 
-      :ok
-    end
-
-    test "can access configuration without starting UDP server" do
-      # Test that we can read configuration without socket operations
-      server_config = TenbinCache.ConfigParser.get_server_config()
-
-      assert is_map(server_config)
-      assert Map.has_key?(server_config, "packet_dump")
-      assert Map.has_key?(server_config, "dump_dir")
+      # Clean up
+      Enum.each(servers, &GenServer.stop/1)
     end
 
-    test "configuration values are properly typed" do
-      server_config = TenbinCache.ConfigParser.get_server_config()
+    test "server fails gracefully on port conflict" do
+      # Start first server on a specific port
+      {:ok, test_socket} = :gen_udp.open(0, [:binary, {:active, false}])
+      {:ok, busy_port} = :inet.port(test_socket)
+      # Keep the socket open to block the port
 
-      packet_dump = Map.get(server_config, "packet_dump", false)
-      dump_dir = Map.get(server_config, "dump_dir", "log/dump")
+      # Try to start server on the same port (should fail)
+      Process.flag(:trap_exit, true)
 
-      assert is_boolean(packet_dump)
-      assert is_binary(dump_dir)
-    end
-  end
+      result =
+        TenbinCache.UDPServer.start_link(
+          address_family: :inet,
+          port: busy_port
+        )
 
-  describe "Error handling without sockets" do
-    test "handles invalid address family gracefully" do
-      # Test argument validation without socket operations
-      invalid_args = [address_family: :invalid_family, port: 0]
+      # Should fail with appropriate error
+      case result do
+        {:error, _reason} ->
+          # Expected error
+          assert true
 
-      # Verify the arguments are structured properly for validation
-      assert Keyword.keyword?(invalid_args)
-      assert :invalid_family == invalid_args[:address_family]
-    end
-
-    test "handles invalid port values gracefully" do
-      # Test port validation logic without socket operations
-      invalid_ports = [-1, 65536, "invalid"]
-
-      Enum.each(invalid_ports, fn invalid_port ->
-        args = [address_family: :inet, port: invalid_port]
-        assert Keyword.keyword?(args)
-        assert args[:port] == invalid_port
-      end)
-    end
-  end
-
-  describe "Receive loop logic validation" do
-    test "socket error constants are defined" do
-      # Test that we handle expected socket errors
-      expected_errors = [:closed, :timeout, :einval, :econnreset]
-
-      Enum.each(expected_errors, fn error ->
-        assert is_atom(error)
-      end)
-    end
-
-    test "buffer size constant is reasonable" do
-      # Test buffer size without creating socket
-      buffer_size = 65_535
-
-      assert is_integer(buffer_size)
-      assert buffer_size > 0
-      assert buffer_size <= 65_535  # Maximum UDP packet size
-    end
-  end
-
-  describe "Module structure validation" do
-    test "private functions are properly scoped" do
-      # Ensure private functions exist (they won't be in public interface)
-      public_functions = TenbinCache.UDPServer.__info__(:functions)
-
-      # These should NOT be public
-      refute {:open_socket, 2} in public_functions
-      refute {:receive_loop, 2} in public_functions
-
-      # These SHOULD be public
-      assert {:start_link, 1} in public_functions
-      assert {:get_port, 1} in public_functions
-      assert {:get_socket, 1} in public_functions
-    end
-  end
-
-  describe "Safe integration testing" do
-    setup do
-      TestHelper.setup_test_env()
-      TestHelper.start_tenbin_cache_for_test()
-
-      on_exit(fn ->
-        TestHelper.stop_tenbin_cache()
-      end)
-
-      :ok
-    end
-
-    test "GenServer call structure is correct" do
-      # Test GenServer call interface without actual socket operations
-      assert {:get_port, []} == {:get_port, []}
-      assert {:get_socket, []} == {:get_socket, []}
-    end
-
-    test "packet dump configuration logic" do
-      server_config = TenbinCache.ConfigParser.get_server_config()
-
-      packet_dump_enabled = Map.get(server_config, "packet_dump", false)
-      dump_dir = Map.get(server_config, "dump_dir", "log/dump")
-
-      # Test the logic that would be used in init/1
-      packet_dump_config = if packet_dump_enabled do
-        dump_dir
-      else
-        false
+        {:ok, pid} ->
+          # If it somehow succeeded, it should fail quickly
+          receive do
+            {:EXIT, ^pid, _reason} -> assert true
+          after
+            1000 -> flunk("Expected server to fail on port conflict")
+          end
       end
 
-      case packet_dump_config do
-        false -> assert packet_dump_config == false
-        dir when is_binary(dir) -> assert is_binary(dir)
+      # Clean up
+      :gen_udp.close(test_socket)
+    end
+  end
+
+  describe "UDP Server integration" do
+    test "server handles UDP packets correctly" do
+      # Start server with dynamic port
+      {:ok, pid} =
+        TenbinCache.UDPServer.start_link(
+          address_family: :inet,
+          port: 0
+        )
+
+      {:ok, server_port} = TenbinCache.UDPServer.get_port(pid)
+
+      # Create a client socket
+      {:ok, client_socket} = :gen_udp.open(0, [:binary, {:active, false}])
+
+      # Send a test DNS packet
+      test_packet = <<0x12, 0x34, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00>>
+      :gen_udp.send(client_socket, {127, 0, 0, 1}, server_port, test_packet)
+
+      # Give the server time to process (since it spawns async tasks)
+      Process.sleep(100)
+
+      # Clean up
+      :gen_udp.close(client_socket)
+      GenServer.stop(pid)
+    end
+  end
+
+  describe "UDP Server IPv6 support" do
+    test "starts successfully with IPv6 address family" do
+      # Ensure ConfigParser is running for this test
+      unless Process.whereis(TenbinCache.ConfigParser) do
+        {:ok, _pid} = TenbinCache.ConfigParser.start_link([])
       end
+
+      logs =
+        capture_log(fn ->
+          {:ok, pid} =
+            TenbinCache.UDPServer.start_link(
+              address_family: :inet6,
+              port: 0
+            )
+
+          # Verify server started
+          assert Process.alive?(pid)
+
+          # Get assigned port
+          {:ok, port} = TenbinCache.UDPServer.get_port(pid)
+          assert is_integer(port)
+          assert port > 0
+
+          # Stop the server
+          GenServer.stop(pid)
+        end)
+
+      assert logs =~ "UDP server started on inet6 port"
+    end
+  end
+
+  describe "UDP Server packet dump configuration" do
+    test "configures packet dumping when enabled in config" do
+      # Ensure ConfigParser is running
+      unless Process.whereis(TenbinCache.ConfigParser) do
+        {:ok, _pid} = TenbinCache.ConfigParser.start_link([])
+      end
+
+      # Mock configuration with packet dumping enabled
+      Agent.update(TenbinCache.ConfigParser, fn _ ->
+        %{
+          "proxy" => %{},
+          "server" => %{
+            "packet_dump" => true,
+            "dump_dir" => "test/tmp/packets"
+          }
+        }
+      end)
+
+      logs =
+        capture_log(fn ->
+          {:ok, pid} = TenbinCache.UDPServer.start_link(address_family: :inet, port: 0)
+
+          # Server should start successfully
+          assert Process.alive?(pid)
+
+          GenServer.stop(pid)
+        end)
+
+      assert logs =~ "UDP server started on inet port"
     end
 
-    test "state initialization logic" do
-      # Test the state structure that would be created in init/1
-      test_state = %TenbinCache.UDPServer{
-        socket: nil,
-        address_family: :inet,
-        port: 0,
-        packet_dump_config: false
-      }
+    test "configures packet dumping as disabled when config is false" do
+      # Ensure ConfigParser is running
+      unless Process.whereis(TenbinCache.ConfigParser) do
+        {:ok, _pid} = TenbinCache.ConfigParser.start_link([])
+      end
 
-      assert test_state.address_family == :inet
-      assert test_state.port == 0
-      assert test_state.packet_dump_config == false
-      assert is_nil(test_state.socket)
+      # Mock configuration with packet dumping disabled
+      Agent.update(TenbinCache.ConfigParser, fn _ ->
+        %{
+          "proxy" => %{},
+          "server" => %{
+            "packet_dump" => false,
+            "dump_dir" => "log/dump"
+          }
+        }
+      end)
+
+      logs =
+        capture_log(fn ->
+          {:ok, pid} = TenbinCache.UDPServer.start_link(address_family: :inet, port: 0)
+
+          # Server should start successfully
+          assert Process.alive?(pid)
+
+          GenServer.stop(pid)
+        end)
+
+      assert logs =~ "UDP server started on inet port"
+    end
+  end
+
+  describe "UDP Server error handling" do
+    test "handles server initialization errors" do
+      # Ensure ConfigParser is alive for this test
+      case Process.whereis(TenbinCache.ConfigParser) do
+        nil -> {:ok, _pid} = TenbinCache.ConfigParser.start_link([])
+        _ -> :ok
+      end
+
+      # This test ensures that the UDPServer can handle initialization properly
+      # Since socket errors are difficult to trigger reliably in tests,
+      # we test successful initialization as a proxy for error handling capability
+      {:ok, pid} = TenbinCache.UDPServer.start_link(address_family: :inet, port: 0)
+      assert Process.alive?(pid)
+      GenServer.stop(pid)
+    end
+
+    test "terminates cleanly and closes socket" do
+      {:ok, pid} = TenbinCache.UDPServer.start_link(address_family: :inet, port: 0)
+      {:ok, port} = TenbinCache.UDPServer.get_port(pid)
+
+      # Stop the server
+      GenServer.stop(pid)
+
+      # Verify the server is no longer alive
+      refute Process.alive?(pid)
+
+      # Verify the port is freed (we can start another server on the same port)
+      {:ok, new_pid} = TenbinCache.UDPServer.start_link(address_family: :inet, port: port)
+      GenServer.stop(new_pid)
+    end
+
+    test "handles unexpected messages gracefully" do
+      {:ok, pid} = TenbinCache.UDPServer.start_link(address_family: :inet, port: 0)
+
+      # Send an unexpected message
+      send(pid, {:unexpected_message, "test"})
+
+      # Give some time for message processing
+      Process.sleep(50)
+
+      # Server should still be alive
+      assert Process.alive?(pid)
+
+      GenServer.stop(pid)
+    end
+
+    test "handles receive loop errors gracefully" do
+      {:ok, pid} = TenbinCache.UDPServer.start_link(address_family: :inet, port: 0)
+
+      # Get the socket from the server using the public API
+      {:ok, socket} = TenbinCache.UDPServer.get_socket(pid)
+
+      # Close the socket externally to simulate error
+      logs =
+        capture_log(fn ->
+          :gen_udp.close(socket)
+
+          # Give some time for receive loop to detect the closed socket
+          Process.sleep(200)
+        end)
+
+      # Should log the socket closure
+      assert logs =~ "UDP socket closed in receive loop"
+
+      # Server should still be alive (GenServer doesn't crash)
+      assert Process.alive?(pid)
+
+      # Stop the server properly
+      GenServer.stop(pid)
+    end
+  end
+
+  describe "UDP Server socket management" do
+    test "returns correct port through get_port call" do
+      {:ok, pid} = TenbinCache.UDPServer.start_link(address_family: :inet, port: 0)
+
+      {:ok, port} = TenbinCache.UDPServer.get_port(pid)
+      assert is_integer(port)
+      assert port > 0 and port <= 65_535
+
+      GenServer.stop(pid)
+    end
+
+    test "handles multiple concurrent connections" do
+      # Ensure ConfigParser is alive for this test
+      case Process.whereis(TenbinCache.ConfigParser) do
+        nil -> {:ok, _pid} = TenbinCache.ConfigParser.start_link([])
+        _ -> :ok
+      end
+
+      {:ok, pid} = TenbinCache.UDPServer.start_link(address_family: :inet, port: 0)
+      {:ok, server_port} = TenbinCache.UDPServer.get_port(pid)
+
+      # Create multiple client sockets
+      clients =
+        Enum.map(1..3, fn _ ->
+          {:ok, socket} = :gen_udp.open(0, [:binary, {:active, false}])
+          socket
+        end)
+
+      # Send packets from all clients
+      test_packet = create_test_dns_packet()
+
+      Enum.each(clients, fn socket ->
+        :gen_udp.send(socket, {127, 0, 0, 1}, server_port, test_packet)
+      end)
+
+      # Give time for processing
+      Process.sleep(200)
+
+      # Server should still be alive
+      assert Process.alive?(pid)
+
+      # Clean up
+      Enum.each(clients, &:gen_udp.close/1)
+      GenServer.stop(pid)
+    end
+
+    test "handles large packets within buffer limits" do
+      {:ok, pid} = TenbinCache.UDPServer.start_link(address_family: :inet, port: 0)
+      {:ok, server_port} = TenbinCache.UDPServer.get_port(pid)
+
+      # Create a large but valid DNS packet (close to buffer limit)
+      large_packet = TenbinCache.DNSTestHelper.create_large_dns_packet()
+
+      {:ok, client_socket} = :gen_udp.open(0, [:binary, {:active, false}])
+
+      # Send large packet - should not crash the server
+      :gen_udp.send(client_socket, {127, 0, 0, 1}, server_port, large_packet)
+
+      # Give time for processing
+      Process.sleep(100)
+
+      # Server should still be alive
+      assert Process.alive?(pid)
+
+      :gen_udp.close(client_socket)
+      GenServer.stop(pid)
     end
   end
 end

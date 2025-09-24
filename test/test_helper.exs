@@ -19,6 +19,7 @@ defmodule TestHelper do
     unless File.exists?("priv/test/tenbin_cache.yaml") do
       raise "Test configuration not found - check priv/test/tenbin_cache.yaml"
     end
+
     :ok
   end
 

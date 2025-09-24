@@ -60,7 +60,7 @@ defmodule TenbinCache.MixProject do
 
   defp test_coverage do
     [
-      summary: [threshold: 75]
+      summary: [threshold: 80]
     ]
   end
 end
