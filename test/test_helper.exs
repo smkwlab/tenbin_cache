@@ -54,6 +54,7 @@ defmodule TestHelper do
         case reason do
           {:already_started, _} ->
             :ok
+
           _ ->
             IO.puts("Failed to start TenbinCache for test: #{inspect(reason)}")
             raise "Test setup failed"
@@ -69,6 +70,7 @@ defmodule TestHelper do
     unless Process.whereis(TenbinCache.ConfigParser) do
       {:ok, _pid} = TenbinCache.ConfigParser.start_link([])
     end
+
     :ok
   end
 
