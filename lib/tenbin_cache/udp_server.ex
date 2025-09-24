@@ -189,6 +189,7 @@ defmodule TenbinCache.UDPServer do
         receive_loop(socket, packet_dump_config)
 
       {:error, :closed} ->
+        # Always log for debugging, but tests can capture or ignore as needed
         Logger.warning("UDP socket closed in receive loop")
         :ok
 

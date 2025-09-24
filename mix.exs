@@ -10,7 +10,8 @@ defmodule TenbinCache.MixProject do
       deps: deps(),
       description: description(),
       package: package(),
-      dialyzer: dialyzer()
+      dialyzer: dialyzer(),
+      test_coverage: test_coverage()
     ]
   end
 
@@ -54,6 +55,12 @@ defmodule TenbinCache.MixProject do
       plt_file: {:no_warn, "priv/plts/dialyzer.plt"},
       plt_add_apps: [:mix, :ex_unit],
       flags: [:error_handling, :underspecs]
+    ]
+  end
+
+  defp test_coverage do
+    [
+      summary: [threshold: 80]
     ]
   end
 end

@@ -149,6 +149,9 @@ defmodule TenbinCache.UDPServerTest do
 
   describe "UDP Server IPv6 support" do
     test "starts successfully with IPv6 address family" do
+      # Ensure ConfigParser is running for this test
+      TestHelper.ensure_config_parser()
+
       logs =
         capture_log(fn ->
           {:ok, pid} =
@@ -175,6 +178,9 @@ defmodule TenbinCache.UDPServerTest do
 
   describe "UDP Server packet dump configuration" do
     test "configures packet dumping when enabled in config" do
+      # Ensure ConfigParser is running
+      TestHelper.ensure_config_parser()
+
       # Mock configuration with packet dumping enabled
       Agent.update(TenbinCache.ConfigParser, fn _ ->
         %{
@@ -200,6 +206,9 @@ defmodule TenbinCache.UDPServerTest do
     end
 
     test "configures packet dumping as disabled when config is false" do
+      # Ensure ConfigParser is running
+      TestHelper.ensure_config_parser()
+
       # Mock configuration with packet dumping disabled
       Agent.update(TenbinCache.ConfigParser, fn _ ->
         %{
