@@ -60,25 +60,40 @@ defmodule TenbinCache.DNSTestHelper do
   def create_large_dns_packet do
     # Base packet header (same as create_test_dns_packet)
     header = <<
-      0x30, 0x39,  # Transaction ID (12345)
-      0x01, 0x00,  # Flags
-      0x00, 0x01,  # QDCOUNT: 1 question
-      0x00, 0x00,  # ANCOUNT: 0 answers
-      0x00, 0x00,  # NSCOUNT: 0 authority records
-      0x00, 0x00   # ARCOUNT: 0 additional records
+      # Transaction ID (12345)
+      0x30,
+      0x39,
+      # Flags
+      0x01,
+      0x00,
+      # QDCOUNT: 1 question
+      0x00,
+      0x01,
+      # ANCOUNT: 0 answers
+      0x00,
+      0x00,
+      # NSCOUNT: 0 authority records
+      0x00,
+      0x00,
+      # ARCOUNT: 0 additional records
+      0x00,
+      0x00
     >>
 
     # Create a long domain name to make the packet larger
     # Use multiple labels to create a long but valid domain
-    long_domain_labels = Enum.map(1..20, fn i ->
-      label = "label#{i}"
-      <<byte_size(label)>> <> label
-    end)
+    long_domain_labels =
+      Enum.map(1..20, fn i ->
+        label = "label#{i}"
+        <<byte_size(label)>> <> label
+      end)
 
-    long_domain = Enum.join(long_domain_labels, "") <> <<0x00>>  # Root label
+    # Root label
+    long_domain = Enum.join(long_domain_labels, "") <> <<0x00>>
 
     # Question section with long domain
-    question = long_domain <> <<0x00, 0x01, 0x00, 0x01>>  # QTYPE: A, QCLASS: IN
+    # QTYPE: A, QCLASS: IN
+    question = long_domain <> <<0x00, 0x01, 0x00, 0x01>>
 
     header <> question
   end
