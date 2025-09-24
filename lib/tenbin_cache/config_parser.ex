@@ -24,6 +24,12 @@ defmodule TenbinCache.ConfigParser do
   server:
     packet_dump: false          # Enable packet dumping for debugging
     dump_dir: "log/dump"        # Directory for packet dumps
+
+  # Logging settings
+  logging:
+    dns_query_logging: true     # Enable DNS query/response logging
+    log_level: "info"           # Log level (debug, info, warn, error)
+    log_format: "json"          # Log format (json, text)
   ```
 
   ## Configuration Locations
@@ -76,6 +82,11 @@ defmodule TenbinCache.ConfigParser do
     "server" => %{
       "packet_dump" => false,
       "dump_dir" => "log/dump"
+    },
+    "logging" => %{
+      "dns_query_logging" => true,
+      "log_level" => "info",
+      "log_format" => "json"
     }
   }
 
@@ -95,6 +106,15 @@ defmodule TenbinCache.ConfigParser do
 
   def get_server_config do
     Agent.get(__MODULE__, &Map.get(&1, "server", %{}))
+  end
+
+  def get_logging_config do
+    Agent.get(__MODULE__, &Map.get(&1, "logging", %{}))
+  end
+
+  def dns_query_logging_enabled? do
+    logging_config = get_logging_config()
+    Map.get(logging_config, "dns_query_logging", true)
   end
 
   def reload do

@@ -36,3 +36,14 @@ server:
 
   # Directory to save packet dumps (only used if packet_dump is true)
   dump_dir: "log/dump"
+
+# Logging configuration
+logging:
+  # Enable DNS query and response logging
+  dns_query_logging: true
+
+  # Log level (debug, info, warn, error)
+  log_level: "info"
+
+  # Log format (json for structured logging, text for human-readable)
+  log_format: "json"
