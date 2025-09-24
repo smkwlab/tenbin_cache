@@ -129,6 +129,32 @@ defmodule TenbinCache.Logger do
     :ok
   end
 
+  @doc """
+  Format IP address tuple to string representation.
+
+  Uses Erlang's :inet.ntoa/1 for proper IPv4/IPv6 formatting according to RFCs.
+
+  ## Parameters
+
+  - ip_tuple: IP address tuple (IPv4 4-tuple or IPv6 8-tuple)
+
+  ## Examples
+
+      iex> TenbinCache.Logger.format_ip_address({192, 168, 1, 1})
+      "192.168.1.1"
+
+      iex> TenbinCache.Logger.format_ip_address({0x2001, 0x0db8, 0, 0, 0, 0, 0, 1})
+      "2001:db8::1"
+  """
+  def format_ip_address(ip_tuple) when tuple_size(ip_tuple) == 4 or tuple_size(ip_tuple) == 8 do
+    # Use Erlang's inet:ntoa/1 for proper IP address formatting
+    # This handles both IPv4 and IPv6 addresses correctly according to RFCs
+    case :inet.ntoa(ip_tuple) do
+      {:error, _} -> "invalid_ip"
+      formatted_ip -> List.to_string(formatted_ip)
+    end
+  end
+
   # Private functions
 
   defp dns_logging_enabled?() do
@@ -150,33 +176,4 @@ defmodule TenbinCache.Logger do
     |> DateTime.to_iso8601()
   end
 
-  defp format_ip_address(ip_tuple) when tuple_size(ip_tuple) == 4 do
-    # IPv4 address
-    ip_tuple
-    |> Tuple.to_list()
-    |> Enum.join(".")
-  end
-
-  defp format_ip_address(ip_tuple) when tuple_size(ip_tuple) == 8 do
-    # IPv6 address
-    ip_tuple
-    |> Tuple.to_list()
-    |> Enum.map(&Integer.to_string(&1, 16))
-    |> Enum.join(":")
-    |> String.downcase()
-    |> compress_ipv6_zeros()
-  end
-
-  defp compress_ipv6_zeros(ipv6_string) do
-    # Simple IPv6 zero compression - replace consecutive :0: with ::
-    ipv6_string
-    |> String.replace(~r/:0:0:0:0:0:0:0:/, "::")
-    |> String.replace(~r/:0:0:0:0:0:0:/, "::")
-    |> String.replace(~r/:0:0:0:0:0:/, "::")
-    |> String.replace(~r/:0:0:0:0:/, "::")
-    |> String.replace(~r/:0:0:0:/, "::")
-    |> String.replace(~r/:0:0:/, "::")
-    |> String.replace(~r/^0:0:0:0:0:0:0:/, "::")
-    |> String.replace(~r/:0:0:0:0:0:0:0$/, "::")
-  end
 end

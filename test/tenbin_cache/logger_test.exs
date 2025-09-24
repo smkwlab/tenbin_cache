@@ -105,8 +105,10 @@ defmodule TenbinCache.LoggerTest do
       log_line = logs |> String.trim() |> String.split("\n") |> List.last()
 
       # Extract JSON part from log line (remove Elixir log prefix)
-      json_start = :binary.match(log_line, "{") |> elem(0)
-      json_part = String.slice(log_line, json_start..-1//1)
+      json_part = case :binary.match(log_line, "{") do
+        :nomatch -> "{}"  # Fallback if no JSON found
+        {json_start, _} -> String.slice(log_line, json_start..-1//1)
+      end
 
       # Parse and validate JSON
       assert {:ok, parsed} = Jason.decode(json_part)
@@ -145,8 +147,10 @@ defmodule TenbinCache.LoggerTest do
 
       # Verify the malicious content is properly escaped in JSON
       log_line = logs |> String.trim() |> String.split("\n") |> List.last()
-      json_start = :binary.match(log_line, "{") |> elem(0)
-      json_part = String.slice(log_line, json_start..-1//1)
+      json_part = case :binary.match(log_line, "{") do
+        :nomatch -> "{}"  # Fallback if no JSON found
+        {json_start, _} -> String.slice(log_line, json_start..-1//1)
+      end
 
       assert {:ok, parsed} = Jason.decode(json_part)
       assert parsed["query_name"] == malicious_query

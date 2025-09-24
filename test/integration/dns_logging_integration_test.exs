@@ -136,8 +136,10 @@ defmodule TenbinCache.DNSLoggingIntegrationTest do
       log_line = logs |> String.trim() |> String.split("\n") |> List.last()
 
       # Extract JSON from log line
-      json_start = :binary.match(log_line, "{") |> elem(0)
-      json_part = String.slice(log_line, json_start..-1//1)
+      json_part = case :binary.match(log_line, "{") do
+        :nomatch -> "{}"  # Fallback if no JSON found
+        {json_start, _} -> String.slice(log_line, json_start..-1//1)
+      end
 
       # Validate JSON structure
       assert {:ok, parsed} = Jason.decode(json_part)

@@ -226,7 +226,10 @@ defmodule TenbinCache.DNSWorker do
 
       {query_name, query_type, query_class}
     rescue
-      _ ->
+      FunctionClauseError -> {"parse_error", :UNKNOWN, :IN}
+      ArgumentError -> {"parse_error", :UNKNOWN, :IN}
+      e in [MatchError, KeyError] ->
+        Logger.debug("DNS packet parse error: #{inspect(e)}")
         {"parse_error", :UNKNOWN, :IN}
     end
   end
@@ -255,8 +258,8 @@ defmodule TenbinCache.DNSWorker do
       |> Enum.map(fn answer ->
         case answer do
           %{rdata: rdata} when is_tuple(rdata) ->
-            # Convert IP tuple to string
-            rdata |> Tuple.to_list() |> Enum.join(".")
+            # Use Logger's format_ip_address function for proper IPv4/IPv6 handling
+            TenbinCache.Logger.format_ip_address(rdata)
           %{rdata: rdata} when is_binary(rdata) -> rdata
           _ -> "unknown"
         end
@@ -264,7 +267,10 @@ defmodule TenbinCache.DNSWorker do
 
       {response_data, answer_count, response_code}
     rescue
-      _ ->
+      FunctionClauseError -> {[], 0, "PARSE_ERROR"}
+      ArgumentError -> {[], 0, "PARSE_ERROR"}
+      e in [MatchError, KeyError] ->
+        Logger.debug("DNS response parse error: #{inspect(e)}")
         {[], 0, "PARSE_ERROR"}
     end
   end
@@ -295,10 +301,10 @@ defmodule TenbinCache.DNSWorker do
 
     DNSpacket.create(servfail_packet)
   rescue
-    _e ->
+    e in [FunctionClauseError, ArgumentError, MatchError, KeyError] ->
       # If parsing fails, create a minimal SERVFAIL response
       # This is a fallback for completely malformed packets
-      Logger.warning("Failed to parse packet for SERVFAIL response")
+      Logger.warning("Failed to parse packet for SERVFAIL response: #{inspect(e)}")
       create_minimal_servfail()
   end
 
