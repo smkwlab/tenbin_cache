@@ -49,25 +49,31 @@ defmodule TenbinCache.DNSLoggingIntegrationTest do
       assert String.contains?(logs, "test.com")
     end
 
-    test "Logger falls back gracefully when ConfigParser unavailable" do
-      # Stop ConfigParser temporarily
-      if pid = Process.whereis(TenbinCache.ConfigParser) do
-        Process.exit(pid, :kill)
-        # Wait for process to be gone
-        Process.sleep(10)
-      end
+    test "Logger uses Application environment over ConfigParser when set" do
+      # Set Application environment to override ConfigParser
+      Application.put_env(:tenbin_cache, :dns_query_logging, false)
 
-      # Logging should still work with fallback to default (enabled)
+      # Even though ConfigParser has logging enabled, Application env should take precedence
       logs =
         capture_log([level: :info], fn ->
-          TenbinCache.Logger.log_dns_query_received({127, 0, 0, 1}, "fallback.test", :A, :IN)
+          TenbinCache.Logger.log_dns_query_received({127, 0, 0, 1}, "app_env_test.com", :A, :IN)
+        end)
+
+      assert logs == ""
+
+      # Test with Application environment enabled
+      Application.put_env(:tenbin_cache, :dns_query_logging, true)
+
+      logs =
+        capture_log([level: :info], fn ->
+          TenbinCache.Logger.log_dns_query_received({127, 0, 0, 1}, "app_env_enabled.com", :A, :IN)
         end)
 
       assert String.contains?(logs, "dns_query_received")
-      assert String.contains?(logs, "fallback.test")
+      assert String.contains?(logs, "app_env_enabled.com")
 
-      # Restart ConfigParser for cleanup
-      {:ok, _pid} = TenbinCache.ConfigParser.start_link([])
+      # Cleanup
+      Application.delete_env(:tenbin_cache, :dns_query_logging)
     end
 
     test "DNS logging can be disabled via configuration" do
