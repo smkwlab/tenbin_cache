@@ -51,9 +51,25 @@ defmodule TestHelper do
       :ok
     catch
       :exit, reason ->
-        IO.puts("Failed to start TenbinCache for test: #{inspect(reason)}")
-        raise "Test setup failed"
+        case reason do
+          {:already_started, _} ->
+            :ok
+          _ ->
+            IO.puts("Failed to start TenbinCache for test: #{inspect(reason)}")
+            raise "Test setup failed"
+        end
     end
+  end
+
+  @doc """
+  Ensure ConfigParser is running for tests that require it.
+  This is a common pattern used across multiple tests.
+  """
+  def ensure_config_parser do
+    unless Process.whereis(TenbinCache.ConfigParser) do
+      {:ok, _pid} = TenbinCache.ConfigParser.start_link([])
+    end
+    :ok
   end
 
   def stop_tenbin_cache do
