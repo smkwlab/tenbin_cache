@@ -1,11 +1,14 @@
 defmodule TenbinCache.DNSWorkerTest do
   use ExUnit.Case
   import ExUnit.CaptureLog
+  import TenbinCache.DNSTestHelper
 
   setup do
     # Ensure ConfigParser is stopped and restarted for clean state
     case Process.whereis(TenbinCache.ConfigParser) do
-      nil -> :ok
+      nil ->
+        :ok
+
       pid when is_pid(pid) ->
         try do
           GenServer.stop(pid)
@@ -34,27 +37,31 @@ defmodule TenbinCache.DNSWorkerTest do
 
       # Set up configuration with timeout to non-responsive server
       proxy_config = %{
-        "upstream" => "10.255.255.1",  # Non-routable IP for timeout
+        # Non-routable IP for timeout
+        "upstream" => "10.255.255.1",
         "upstream_port" => 53,
-        "timeout" => 100,  # Very short timeout
+        # Very short timeout
+        "timeout" => 100,
         "max_retries" => 1
       }
 
       # Mock the configuration
       # Give a small delay to ensure ConfigParser is ready
       Process.sleep(10)
+
       Agent.update(TenbinCache.ConfigParser, fn _ ->
         %{"proxy" => proxy_config, "server" => %{}}
       end)
 
       # Capture logs to verify error handling
-      logs = capture_log(fn ->
-        TenbinCache.DNSWorker.worker(
-          {{127, 0, 0, 1}, 12_345, test_packet},
-          client_socket,
-          false
-        )
-      end)
+      logs =
+        capture_log(fn ->
+          TenbinCache.DNSWorker.worker(
+            {{127, 0, 0, 1}, 12_345, test_packet},
+            client_socket,
+            false
+          )
+        end)
 
       # Verify that appropriate error messages are logged
       assert logs =~ "DNS forward to 10.255.255.1 failed"
@@ -82,21 +89,24 @@ defmodule TenbinCache.DNSWorkerTest do
       # Mock the configuration
       # Give a small delay to ensure ConfigParser is ready
       Process.sleep(10)
+
       Agent.update(TenbinCache.ConfigParser, fn _ ->
         %{"proxy" => proxy_config, "server" => %{}}
       end)
 
       # This should handle gracefully by falling back to localhost
-      logs = capture_log(fn ->
-        TenbinCache.DNSWorker.worker(
-          {{127, 0, 0, 1}, 12_345, test_packet},
-          client_socket,
-          false
-        )
-      end)
+      logs =
+        capture_log(fn ->
+          TenbinCache.DNSWorker.worker(
+            {{127, 0, 0, 1}, 12_345, test_packet},
+            client_socket,
+            false
+          )
+        end)
 
       # Should not crash and should handle the fallback gracefully
-      assert logs =~ "DNS forward to invalid.server.address failed" or logs =~ "DNS proxy forward failed"
+      assert logs =~ "DNS forward to invalid.server.address failed" or
+               logs =~ "DNS proxy forward failed"
 
       :gen_udp.close(client_socket)
     end
@@ -111,7 +121,8 @@ defmodule TenbinCache.DNSWorkerTest do
       # Set up configuration with non-existent port
       proxy_config = %{
         "upstream" => "127.0.0.1",
-        "upstream_port" => 12_345,  # Non-existent DNS server port
+        # Non-existent DNS server port
+        "upstream_port" => 12_345,
         "timeout" => 500,
         "max_retries" => 2
       }
@@ -119,18 +130,20 @@ defmodule TenbinCache.DNSWorkerTest do
       # Mock the configuration
       # Give a small delay to ensure ConfigParser is ready
       Process.sleep(10)
+
       Agent.update(TenbinCache.ConfigParser, fn _ ->
         %{"proxy" => proxy_config, "server" => %{}}
       end)
 
       # Capture logs to verify retry behavior
-      logs = capture_log(fn ->
-        TenbinCache.DNSWorker.worker(
-          {{127, 0, 0, 1}, 12_345, test_packet},
-          client_socket,
-          false
-        )
-      end)
+      logs =
+        capture_log(fn ->
+          TenbinCache.DNSWorker.worker(
+            {{127, 0, 0, 1}, 12_345, test_packet},
+            client_socket,
+            false
+          )
+        end)
 
       # Verify retry attempts are logged
       assert logs =~ "retrying (2 attempts left)"
@@ -152,15 +165,18 @@ defmodule TenbinCache.DNSWorkerTest do
 
       # Set up configuration with non-responsive server
       proxy_config = %{
-        "upstream" => "10.255.255.1",  # Non-routable IP
+        # Non-routable IP
+        "upstream" => "10.255.255.1",
         "upstream_port" => 53,
         "timeout" => 100,
-        "max_retries" => 0  # No retries for faster test
+        # No retries for faster test
+        "max_retries" => 0
       }
 
       # Mock the configuration
       # Give a small delay to ensure ConfigParser is ready
       Process.sleep(10)
+
       Agent.update(TenbinCache.ConfigParser, fn _ ->
         %{"proxy" => proxy_config, "server" => %{}}
       end)
@@ -177,8 +193,10 @@ defmodule TenbinCache.DNSWorkerTest do
         {:ok, {_addr, _port, response_packet}} ->
           # Parse the response to verify it's a SERVFAIL
           parsed_response = DNSpacket.parse(response_packet)
-          assert parsed_response.rcode == 2  # SERVFAIL
-          assert parsed_response.qr == 1     # Response bit set
+          # SERVFAIL
+          assert parsed_response.rcode == 2
+          # Response bit set
+          assert parsed_response.qr == 1
 
         {:error, :timeout} ->
           # Response might have been sent to different socket, that's ok for this test
@@ -208,7 +226,8 @@ defmodule TenbinCache.DNSWorkerTest do
       # Set up configuration with packet dumping enabled
       proxy_config = %{
         "upstream" => "127.0.0.1",
-        "upstream_port" => 12_345,  # Non-existent DNS server port
+        # Non-existent DNS server port
+        "upstream_port" => 12_345,
         "timeout" => 100,
         "max_retries" => 0
       }
@@ -220,6 +239,7 @@ defmodule TenbinCache.DNSWorkerTest do
 
       # Mock the configuration
       Process.sleep(10)
+
       Agent.update(TenbinCache.ConfigParser, fn _ ->
         %{"proxy" => proxy_config, "server" => server_config}
       end)
@@ -257,31 +277,34 @@ defmodule TenbinCache.DNSWorkerTest do
       # Create a mock client socket
       {:ok, client_socket} = :gen_udp.open(0, [:binary, {:active, false}])
 
-      # Use an invalid dump directory (like a file path that can't be created)
-      invalid_dump_dir = "/proc/invalid_dump_dir"
+      # Use an invalid dump directory (portable across all OS)
+      invalid_dump_dir = TenbinCache.DNSTestHelper.create_invalid_directory_path()
 
       # Set up configuration with packet dumping enabled but invalid directory
       proxy_config = %{
         "upstream" => "127.0.0.1",
-        "upstream_port" => 12_345,  # Non-existent DNS server port
+        # Non-existent DNS server port
+        "upstream_port" => 12_345,
         "timeout" => 100,
         "max_retries" => 0
       }
 
       # Mock the configuration
       Process.sleep(10)
+
       Agent.update(TenbinCache.ConfigParser, fn _ ->
         %{"proxy" => proxy_config, "server" => %{}}
       end)
 
       # This should not crash even if packet dump fails
-      logs = capture_log(fn ->
-        TenbinCache.DNSWorker.worker(
-          {{127, 0, 0, 1}, 12_345, test_packet},
-          client_socket,
-          invalid_dump_dir
-        )
-      end)
+      logs =
+        capture_log(fn ->
+          TenbinCache.DNSWorker.worker(
+            {{127, 0, 0, 1}, 12_345, test_packet},
+            client_socket,
+            invalid_dump_dir
+          )
+        end)
 
       # Should contain error or continue processing
       assert logs =~ "Failed to save packet" or logs =~ "DNS proxy forward failed"
@@ -306,18 +329,20 @@ defmodule TenbinCache.DNSWorkerTest do
 
       # Mock the configuration
       Process.sleep(10)
+
       Agent.update(TenbinCache.ConfigParser, fn _ ->
         %{"proxy" => proxy_config, "server" => %{}}
       end)
 
       # This should handle invalid packets gracefully
-      logs = capture_log(fn ->
-        TenbinCache.DNSWorker.worker(
-          {{127, 0, 0, 1}, 12_345, invalid_packet},
-          client_socket,
-          false
-        )
-      end)
+      logs =
+        capture_log(fn ->
+          TenbinCache.DNSWorker.worker(
+            {{127, 0, 0, 1}, 12_345, invalid_packet},
+            client_socket,
+            false
+          )
+        end)
 
       # Should either generate a minimal SERVFAIL or log parsing failure
       assert logs =~ "Failed to parse packet" or logs =~ "DNS proxy forward failed"
@@ -330,17 +355,21 @@ defmodule TenbinCache.DNSWorkerTest do
       {:ok, client_socket} = :gen_udp.open(0, [:binary, {:active, false}])
 
       # This should handle exceptions gracefully by using invalid packet that causes parsing errors
-      logs = capture_log(fn ->
-        # Use a packet that will cause an exception during DNSpacket.parse
-        invalid_packet = <<0x12, 0x34>>  # Too short to be a valid DNS packet
+      _logs =
+        capture_log(fn ->
+          # Use a packet that will cause an exception during DNSpacket.parse
+          # Too short to be a valid DNS packet
+          invalid_packet = <<0x12, 0x34>>
 
-        result = TenbinCache.DNSWorker.worker(
-          {{127, 0, 0, 1}, 12_345, invalid_packet},
-          client_socket,
-          false
-        )
-        assert result == :ok
-      end)
+          result =
+            TenbinCache.DNSWorker.worker(
+              {{127, 0, 0, 1}, 12_345, invalid_packet},
+              client_socket,
+              false
+            )
+
+          assert result == :ok
+        end)
 
       # Should either handle gracefully or continue processing
       # The function should not crash and return :ok
@@ -365,43 +394,23 @@ defmodule TenbinCache.DNSWorkerTest do
 
       # Mock the configuration
       Process.sleep(10)
+
       Agent.update(TenbinCache.ConfigParser, fn _ ->
         %{"proxy" => proxy_config, "server" => %{}}
       end)
 
       # This should handle send failures gracefully
-      logs = capture_log(fn ->
-        TenbinCache.DNSWorker.worker(
-          {{127, 0, 0, 1}, 12_345, test_packet},
-          client_socket,
-          false
-        )
-      end)
+      logs =
+        capture_log(fn ->
+          TenbinCache.DNSWorker.worker(
+            {{127, 0, 0, 1}, 12_345, test_packet},
+            client_socket,
+            false
+          )
+        end)
 
       # Should log the send failure or continue without crashing
       assert logs =~ "Failed to send DNS reply" or logs =~ "DNS proxy forward failed"
     end
-  end
-
-  # Helper function to create a test DNS packet
-  defp create_test_dns_packet do
-    # Create a simple binary DNS query packet for testing
-    # This is a manually crafted DNS query for "example.com" A record
-    <<
-      # Header
-      0x30, 0x39,  # Transaction ID (12345)
-      0x01, 0x00,  # Flags: QR=0, Opcode=0, AA=0, TC=0, RD=1, RA=0, Z=0, RCODE=0
-      0x00, 0x01,  # QDCOUNT: 1 question
-      0x00, 0x00,  # ANCOUNT: 0 answers
-      0x00, 0x00,  # NSCOUNT: 0 authority records
-      0x00, 0x00,  # ARCOUNT: 0 additional records
-
-      # Question section
-      0x07, "example",  # 7-byte label "example"
-      0x03, "com",      # 3-byte label "com"
-      0x00,             # Root label (end of domain name)
-      0x00, 0x01,       # QTYPE: A record (1)
-      0x00, 0x01        # QCLASS: IN (1)
-    >>
   end
 end

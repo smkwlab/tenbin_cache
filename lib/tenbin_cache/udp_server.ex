@@ -85,15 +85,27 @@ defmodule TenbinCache.UDPServer do
     GenServer.call(pid, :get_port)
   end
 
+  @doc """
+  Get the socket from the UDP server for testing purposes.
+
+  This function provides access to the server's socket for test scenarios
+  that require socket manipulation, replacing direct state introspection.
+  """
+  def get_socket(pid) do
+    GenServer.call(pid, :get_socket)
+  end
+
   # Server Callbacks
 
   @impl true
   def init(opts) do
     address_family = Keyword.fetch!(opts, :address_family)
-    port = Keyword.get(opts, :port, 0)  # 0 means allocate any available port
+    # 0 means allocate any available port
+    port = Keyword.get(opts, :port, 0)
 
     # Get packet dump configuration
     server_config = TenbinCache.ConfigParser.get_server_config()
+
     packet_dump_config =
       if Map.get(server_config, "packet_dump", false) do
         Map.get(server_config, "dump_dir", "log/dump")
@@ -132,6 +144,11 @@ defmodule TenbinCache.UDPServer do
   end
 
   @impl true
+  def handle_call(:get_socket, _from, state) do
+    {:reply, {:ok, state.socket}, state}
+  end
+
+  @impl true
   def handle_info({:task_exit, reason}, state) do
     Logger.error("UDP receive task exited: #{inspect(reason)}")
     # Restart the receive loop
@@ -148,6 +165,7 @@ defmodule TenbinCache.UDPServer do
     if state.socket do
       :gen_udp.close(state.socket)
     end
+
     :ok
   end
 

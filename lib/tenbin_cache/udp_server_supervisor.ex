@@ -35,10 +35,12 @@ defmodule TenbinCache.UDPServerSupervisor do
     configured_port = Map.get(proxy_config, "port", 5353)
 
     # Use dynamic port allocation in test environment
-    port = case Application.get_env(:tenbin_cache, :env, Mix.env()) do
-      :test -> 0  # Dynamic port allocation for tests
-      _ -> configured_port
-    end
+    port =
+      case Application.get_env(:tenbin_cache, :env, Mix.env()) do
+        # Dynamic port allocation for tests
+        :test -> 0
+        _ -> configured_port
+      end
 
     children = [
       # IPv4 UDP server

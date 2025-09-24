@@ -16,12 +16,13 @@ defmodule TenbinCacheTest do
 
     test "multiple ports can be allocated independently" do
       # Test that multiple processes can get different ports
-      ports = Enum.map(1..5, fn _ ->
-        {:ok, socket} = :gen_udp.open(0, [:binary, {:active, false}])
-        {:ok, port} = :inet.port(socket)
-        :gen_udp.close(socket)
-        port
-      end)
+      ports =
+        Enum.map(1..5, fn _ ->
+          {:ok, socket} = :gen_udp.open(0, [:binary, {:active, false}])
+          {:ok, port} = :inet.port(socket)
+          :gen_udp.close(socket)
+          port
+        end)
 
       # All ports should be unique
       assert length(Enum.uniq(ports)) == 5

@@ -1,6 +1,7 @@
 defmodule TenbinCache.UDPServerTest do
   use ExUnit.Case
   import ExUnit.CaptureLog
+  import TenbinCache.DNSTestHelper
 
   setup do
     # Start ConfigParser for tests that need it
@@ -19,10 +20,11 @@ defmodule TenbinCache.UDPServerTest do
   describe "UDP Server dynamic port allocation" do
     test "starts with dynamic port when port 0 is specified" do
       # Start server with port 0 for dynamic allocation
-      {:ok, pid} = TenbinCache.UDPServer.start_link(
-        address_family: :inet,
-        port: 0
-      )
+      {:ok, pid} =
+        TenbinCache.UDPServer.start_link(
+          address_family: :inet,
+          port: 0
+        )
 
       # Get the actual allocated port
       {:ok, port} = TenbinCache.UDPServer.get_port(pid)
@@ -42,10 +44,11 @@ defmodule TenbinCache.UDPServerTest do
       :gen_udp.close(test_socket)
 
       # Start server with the specific available port
-      {:ok, pid} = TenbinCache.UDPServer.start_link(
-        address_family: :inet,
-        port: available_port
-      )
+      {:ok, pid} =
+        TenbinCache.UDPServer.start_link(
+          address_family: :inet,
+          port: available_port
+        )
 
       # Verify the exact port is used
       {:ok, port} = TenbinCache.UDPServer.get_port(pid)
@@ -57,19 +60,23 @@ defmodule TenbinCache.UDPServerTest do
 
     test "multiple servers get different dynamic ports" do
       # Start multiple servers with dynamic ports
-      servers = Enum.map(1..3, fn _ ->
-        {:ok, pid} = TenbinCache.UDPServer.start_link(
-          address_family: :inet,
-          port: 0
-        )
-        pid
-      end)
+      servers =
+        Enum.map(1..3, fn _ ->
+          {:ok, pid} =
+            TenbinCache.UDPServer.start_link(
+              address_family: :inet,
+              port: 0
+            )
+
+          pid
+        end)
 
       # Get all ports
-      ports = Enum.map(servers, fn pid ->
-        {:ok, port} = TenbinCache.UDPServer.get_port(pid)
-        port
-      end)
+      ports =
+        Enum.map(servers, fn pid ->
+          {:ok, port} = TenbinCache.UDPServer.get_port(pid)
+          port
+        end)
 
       # All ports should be unique
       assert length(Enum.uniq(ports)) == 3
@@ -87,16 +94,18 @@ defmodule TenbinCache.UDPServerTest do
       # Try to start server on the same port (should fail)
       Process.flag(:trap_exit, true)
 
-      result = TenbinCache.UDPServer.start_link(
-        address_family: :inet,
-        port: busy_port
-      )
+      result =
+        TenbinCache.UDPServer.start_link(
+          address_family: :inet,
+          port: busy_port
+        )
 
       # Should fail with appropriate error
       case result do
         {:error, _reason} ->
           # Expected error
           assert true
+
         {:ok, pid} ->
           # If it somehow succeeded, it should fail quickly
           receive do
@@ -114,10 +123,11 @@ defmodule TenbinCache.UDPServerTest do
   describe "UDP Server integration" do
     test "server handles UDP packets correctly" do
       # Start server with dynamic port
-      {:ok, pid} = TenbinCache.UDPServer.start_link(
-        address_family: :inet,
-        port: 0
-      )
+      {:ok, pid} =
+        TenbinCache.UDPServer.start_link(
+          address_family: :inet,
+          port: 0
+        )
 
       {:ok, server_port} = TenbinCache.UDPServer.get_port(pid)
 
@@ -139,23 +149,25 @@ defmodule TenbinCache.UDPServerTest do
 
   describe "UDP Server IPv6 support" do
     test "starts successfully with IPv6 address family" do
-      logs = capture_log(fn ->
-        {:ok, pid} = TenbinCache.UDPServer.start_link(
-          address_family: :inet6,
-          port: 0
-        )
+      logs =
+        capture_log(fn ->
+          {:ok, pid} =
+            TenbinCache.UDPServer.start_link(
+              address_family: :inet6,
+              port: 0
+            )
 
-        # Verify server started
-        assert Process.alive?(pid)
+          # Verify server started
+          assert Process.alive?(pid)
 
-        # Get assigned port
-        {:ok, port} = TenbinCache.UDPServer.get_port(pid)
-        assert is_integer(port)
-        assert port > 0
+          # Get assigned port
+          {:ok, port} = TenbinCache.UDPServer.get_port(pid)
+          assert is_integer(port)
+          assert port > 0
 
-        # Stop the server
-        GenServer.stop(pid)
-      end)
+          # Stop the server
+          GenServer.stop(pid)
+        end)
 
       assert logs =~ "UDP server started on inet6 port"
     end
@@ -174,14 +186,15 @@ defmodule TenbinCache.UDPServerTest do
         }
       end)
 
-      logs = capture_log(fn ->
-        {:ok, pid} = TenbinCache.UDPServer.start_link(address_family: :inet, port: 0)
+      logs =
+        capture_log(fn ->
+          {:ok, pid} = TenbinCache.UDPServer.start_link(address_family: :inet, port: 0)
 
-        # Server should start successfully
-        assert Process.alive?(pid)
+          # Server should start successfully
+          assert Process.alive?(pid)
 
-        GenServer.stop(pid)
-      end)
+          GenServer.stop(pid)
+        end)
 
       assert logs =~ "UDP server started on inet port"
     end
@@ -198,14 +211,15 @@ defmodule TenbinCache.UDPServerTest do
         }
       end)
 
-      logs = capture_log(fn ->
-        {:ok, pid} = TenbinCache.UDPServer.start_link(address_family: :inet, port: 0)
+      logs =
+        capture_log(fn ->
+          {:ok, pid} = TenbinCache.UDPServer.start_link(address_family: :inet, port: 0)
 
-        # Server should start successfully
-        assert Process.alive?(pid)
+          # Server should start successfully
+          assert Process.alive?(pid)
 
-        GenServer.stop(pid)
-      end)
+          GenServer.stop(pid)
+        end)
 
       assert logs =~ "UDP server started on inet port"
     end
@@ -260,17 +274,17 @@ defmodule TenbinCache.UDPServerTest do
     test "handles receive loop errors gracefully" do
       {:ok, pid} = TenbinCache.UDPServer.start_link(address_family: :inet, port: 0)
 
-      # Get the socket from the server state (through introspection)
-      state = :sys.get_state(pid)
-      socket = state.socket
+      # Get the socket from the server using the public API
+      {:ok, socket} = TenbinCache.UDPServer.get_socket(pid)
 
       # Close the socket externally to simulate error
-      logs = capture_log(fn ->
-        :gen_udp.close(socket)
+      logs =
+        capture_log(fn ->
+          :gen_udp.close(socket)
 
-        # Give some time for receive loop to detect the closed socket
-        Process.sleep(200)
-      end)
+          # Give some time for receive loop to detect the closed socket
+          Process.sleep(200)
+        end)
 
       # Should log the socket closure
       assert logs =~ "UDP socket closed in receive loop"
@@ -305,13 +319,15 @@ defmodule TenbinCache.UDPServerTest do
       {:ok, server_port} = TenbinCache.UDPServer.get_port(pid)
 
       # Create multiple client sockets
-      clients = Enum.map(1..3, fn _ ->
-        {:ok, socket} = :gen_udp.open(0, [:binary, {:active, false}])
-        socket
-      end)
+      clients =
+        Enum.map(1..3, fn _ ->
+          {:ok, socket} = :gen_udp.open(0, [:binary, {:active, false}])
+          socket
+        end)
 
       # Send packets from all clients
       test_packet = create_test_dns_packet()
+
       Enum.each(clients, fn socket ->
         :gen_udp.send(socket, {127, 0, 0, 1}, server_port, test_packet)
       end)
@@ -332,7 +348,7 @@ defmodule TenbinCache.UDPServerTest do
       {:ok, server_port} = TenbinCache.UDPServer.get_port(pid)
 
       # Create a large but valid DNS packet (close to buffer limit)
-      large_packet = create_large_dns_packet()
+      large_packet = TenbinCache.DNSTestHelper.create_large_dns_packet()
 
       {:ok, client_socket} = :gen_udp.open(0, [:binary, {:active, false}])
 
@@ -348,51 +364,5 @@ defmodule TenbinCache.UDPServerTest do
       :gen_udp.close(client_socket)
       GenServer.stop(pid)
     end
-  end
-
-  # Helper functions
-
-  defp create_test_dns_packet do
-    # Create a simple DNS query packet for testing
-    <<
-      # Header
-      0x30, 0x39,  # Transaction ID (12345)
-      0x01, 0x00,  # Flags: QR=0, Opcode=0, AA=0, TC=0, RD=1, RA=0, Z=0, RCODE=0
-      0x00, 0x01,  # QDCOUNT: 1 question
-      0x00, 0x00,  # ANCOUNT: 0 answers
-      0x00, 0x00,  # NSCOUNT: 0 authority records
-      0x00, 0x00,  # ARCOUNT: 0 additional records
-
-      # Question section
-      0x07, "example",  # 7-byte label "example"
-      0x03, "com",      # 3-byte label "com"
-      0x00,             # Root label (end of domain name)
-      0x00, 0x01,       # QTYPE: A record (1)
-      0x00, 0x01        # QCLASS: IN (1)
-    >>
-  end
-
-  defp create_large_dns_packet do
-    # Create a DNS packet with a long domain name to test large packet handling
-    long_label = String.duplicate("a", 63)  # Maximum label length
-
-    <<
-      # Header
-      0x30, 0x39,  # Transaction ID
-      0x01, 0x00,  # Standard query flags
-      0x00, 0x01,  # 1 question
-      0x00, 0x00,  # 0 answers
-      0x00, 0x00,  # 0 authority records
-      0x00, 0x00,  # 0 additional records
-
-      # Question with long domain name
-      63, long_label::binary,    # 63-byte label
-      63, long_label::binary,    # Another 63-byte label
-      63, long_label::binary,    # Another 63-byte label
-      0x03, "com",               # "com" label
-      0x00,                      # Root label
-      0x00, 0x01,                # QTYPE: A
-      0x00, 0x01                 # QCLASS: IN
-    >>
   end
 end

@@ -19,7 +19,8 @@ defmodule TenbinCache.ApplicationTest do
       assert :ok = Application.stop(:tenbin_cache)
 
       # Verify components are stopped
-      Process.sleep(100)  # Allow time for cleanup
+      # Allow time for cleanup
+      Process.sleep(100)
       assert Process.whereis(TenbinCache.ConfigParser) == nil
     end
 
@@ -48,7 +49,8 @@ defmodule TenbinCache.ApplicationTest do
 
       # Get the port (should be dynamic, not 5353)
       {:ok, port} = TenbinCache.UDPServer.get_port(server_pid)
-      assert port != 5353  # Should not be the configured port
+      # Should not be the configured port
+      assert port != 5353
       assert port > 0 and port < 65_536
 
       # Clean up

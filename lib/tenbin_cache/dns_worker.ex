@@ -99,7 +99,15 @@ defmodule TenbinCache.DNSWorker do
         log_retry_attempt(upstream, reason, retries_left)
         # Short delay before retry to avoid overwhelming the upstream server
         Process.sleep(100)
-        forward_with_retries(packet, upstream, upstream_addr, upstream_port, timeout, retries_left - 1)
+
+        forward_with_retries(
+          packet,
+          upstream,
+          upstream_addr,
+          upstream_port,
+          timeout,
+          retries_left - 1
+        )
 
       {:error, reason} ->
         log_upstream_failure(upstream, reason)
@@ -147,7 +155,9 @@ defmodule TenbinCache.DNSWorker do
 
   # Log retry attempts
   defp log_retry_attempt(upstream, reason, retries_left) do
-    Logger.warning("DNS forward to #{upstream} failed: #{format_error(reason)}, retrying (#{retries_left} attempts left)")
+    Logger.warning(
+      "DNS forward to #{upstream} failed: #{format_error(reason)}, retrying (#{retries_left} attempts left)"
+    )
   end
 
   # Log final upstream failure
@@ -157,13 +167,17 @@ defmodule TenbinCache.DNSWorker do
         Logger.error("Upstream DNS server #{upstream} timeout after all retries")
 
       {:socket_open_failed, socket_reason} ->
-        Logger.error("Failed to open socket for upstream DNS server #{upstream}: #{socket_reason}")
+        Logger.error(
+          "Failed to open socket for upstream DNS server #{upstream}: #{socket_reason}"
+        )
 
       {:send_failed, send_reason} ->
         Logger.error("Failed to send query to upstream DNS server #{upstream}: #{send_reason}")
 
       {:recv_failed, recv_reason} ->
-        Logger.error("Failed to receive response from upstream DNS server #{upstream}: #{recv_reason}")
+        Logger.error(
+          "Failed to receive response from upstream DNS server #{upstream}: #{recv_reason}"
+        )
     end
   end
 
@@ -237,8 +251,7 @@ defmodule TenbinCache.DNSWorker do
     {{y, m, d}, {hh, mm, ss}} = :calendar.local_time()
     {ms, _prec} = Time.utc_now().microsecond
 
-    file_name =
-      "dns_packet-#{dir}-#{y}#{:io_lib.format("~2..0B", [m])}#{:io_lib.format("~2..0B", [d])}-#{:io_lib.format("~2..0B", [hh])}#{:io_lib.format("~2..0B", [mm])}#{:io_lib.format("~2..0B", [ss])}.#{ms}.bin"
+    file_name = "dns_packet-#{dir}-#{y}#{String.pad_leading("#{m}", 2, "0")}#{String.pad_leading("#{d}", 2, "0")}-#{String.pad_leading("#{hh}", 2, "0")}#{String.pad_leading("#{mm}", 2, "0")}#{String.pad_leading("#{ss}", 2, "0")}.#{ms}.bin"
 
     file_path = Path.join(dump_dir, file_name)
 
