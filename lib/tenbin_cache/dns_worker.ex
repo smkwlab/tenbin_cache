@@ -53,11 +53,32 @@ defmodule TenbinCache.DNSWorker do
   @servfail_rcode 2
 
   def worker({host, port, packet}, socket, packet_dump_config) do
+    start_time = System.monotonic_time(:millisecond)
+
+    # Extract DNS query information for logging
+    {query_name, query_type, query_class} = extract_query_info(packet)
+
+    # Log DNS query received
+    TenbinCache.Logger.log_dns_query_received(host, query_name, query_type, query_class)
+
     # Save incoming packet for debugging
     packet = save_packet(packet, "in", packet_dump_config)
 
     case forward_to_upstream(packet) do
       {:ok, response_packet} ->
+        processing_time = System.monotonic_time(:millisecond) - start_time
+        {response_data, answer_count, response_code} = extract_response_info(response_packet)
+
+        # Log successful DNS response
+        TenbinCache.Logger.log_dns_response_sent(
+          host,
+          query_name,
+          response_code,
+          answer_count,
+          response_data,
+          processing_time
+        )
+
         # Save outgoing packet and send response
         response_packet
         |> save_packet("out", packet_dump_config)
@@ -65,6 +86,10 @@ defmodule TenbinCache.DNSWorker do
 
       {:error, reason} ->
         Logger.warning("DNS proxy forward failed: #{reason}")
+
+        # Log DNS error
+        TenbinCache.Logger.log_dns_error(host, query_name, format_error_reason(reason))
+
         # Generate SERVFAIL response and send
         generate_servfail_response(packet)
         |> save_packet("out", packet_dump_config)
@@ -187,6 +212,88 @@ defmodule TenbinCache.DNSWorker do
   defp format_error({:send_failed, reason}), do: "send failed: #{reason}"
   defp format_error({:recv_failed, reason}), do: "receive failed: #{reason}"
 
+  # Format error reason for DNS error logging
+  defp format_error_reason(reason) when is_atom(reason), do: to_string(reason)
+  defp format_error_reason({:socket_open_failed, _reason}), do: "upstream_connection_failed"
+  defp format_error_reason({:send_failed, _reason}), do: "upstream_send_failed"
+  defp format_error_reason({:recv_failed, _reason}), do: "upstream_receive_failed"
+  defp format_error_reason(:upstream_timeout), do: "upstream_timeout"
+
+  # Extract query information from DNS packet
+  defp extract_query_info(packet) do
+    try do
+      parsed = DNSpacket.parse(packet)
+      question = List.first(parsed.question) || %{}
+
+      query_name = Map.get(question, :qname, "unknown")
+      query_type = Map.get(question, :qtype, :UNKNOWN)
+      query_class = Map.get(question, :qclass, :IN)
+
+      {query_name, query_type, query_class}
+    rescue
+      FunctionClauseError ->
+        {"parse_error", :UNKNOWN, :IN}
+
+      ArgumentError ->
+        {"parse_error", :UNKNOWN, :IN}
+
+      e in [MatchError, KeyError] ->
+        Logger.debug("DNS packet parse error: #{inspect(e)}")
+        {"parse_error", :UNKNOWN, :IN}
+    end
+  end
+
+  # Extract response information from DNS packet
+  defp extract_response_info(packet) do
+    try do
+      parsed = DNSpacket.parse(packet)
+
+      # Extract response code
+      response_code =
+        case parsed.rcode do
+          0 -> "NOERROR"
+          1 -> "FORMERR"
+          2 -> "SERVFAIL"
+          3 -> "NXDOMAIN"
+          4 -> "NOTIMP"
+          5 -> "REFUSED"
+          _ -> "UNKNOWN"
+        end
+
+      # Count answers
+      answer_count = length(parsed.answer || [])
+
+      # Extract answer data (simplified)
+      response_data =
+        parsed.answer
+        |> Enum.map(fn answer ->
+          case answer do
+            %{rdata: rdata} when is_tuple(rdata) ->
+              # Use Logger's format_ip_address function for proper IPv4/IPv6 handling
+              TenbinCache.Logger.format_ip_address(rdata)
+
+            %{rdata: rdata} when is_binary(rdata) ->
+              rdata
+
+            _ ->
+              "unknown"
+          end
+        end)
+
+      {response_data, answer_count, response_code}
+    rescue
+      FunctionClauseError ->
+        {[], 0, "PARSE_ERROR"}
+
+      ArgumentError ->
+        {[], 0, "PARSE_ERROR"}
+
+      e in [MatchError, KeyError] ->
+        Logger.debug("DNS response parse error: #{inspect(e)}")
+        {[], 0, "PARSE_ERROR"}
+    end
+  end
+
   # Parse upstream forwarder address
   defp parse_upstream_address(addr) when is_binary(addr) do
     case :inet.parse_address(String.to_charlist(addr)) do
@@ -213,10 +320,10 @@ defmodule TenbinCache.DNSWorker do
 
     DNSpacket.create(servfail_packet)
   rescue
-    _e ->
+    e in [FunctionClauseError, ArgumentError, MatchError, KeyError] ->
       # If parsing fails, create a minimal SERVFAIL response
       # This is a fallback for completely malformed packets
-      Logger.warning("Failed to parse packet for SERVFAIL response")
+      Logger.warning("Failed to parse packet for SERVFAIL response: #{inspect(e)}")
       create_minimal_servfail()
   end
 
