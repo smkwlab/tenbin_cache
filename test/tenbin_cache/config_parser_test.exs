@@ -152,7 +152,8 @@ defmodule TenbinCache.ConfigParserTest do
 
     test "handles unreadable configuration file gracefully" do
       # Use portable file access error scenario
-      {test_dir, invalid_file_path} = TenbinCache.DNSTestHelper.create_file_access_error_scenario()
+      {test_dir, invalid_file_path} =
+        TenbinCache.DNSTestHelper.create_file_access_error_scenario()
 
       Application.put_env(:tenbin_cache, :config_file, invalid_file_path)
 

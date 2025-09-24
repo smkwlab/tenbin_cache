@@ -1,0 +1,70 @@
+name: Release
+
+on:
+  # Disabled until ready for Hex publication
+  # push:
+  #   tags:
+  #     - 'v*'
+  workflow_dispatch:
+    inputs:
+      publish_to_hex:
+        description: 'Publish to Hex.pm'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Elixir
+      uses: erlef/setup-beam@v1
+      with:
+        otp-version: '27.0'
+        elixir-version: '1.18.3'
+
+    - name: Install dependencies
+      run: |
+        mix local.hex --force
+        mix local.rebar --force
+        mix deps.get
+
+    - name: Run tests
+      run: mix test
+
+    - name: Build release
+      run: |
+        MIX_ENV=prod mix compile
+        MIX_ENV=prod mix release
+
+    - name: Package release
+      run: |
+        cd _build/prod/rel
+        tar -czf tenbin_cache-${{ github.ref_name }}.tar.gz tenbin_cache/
+        mv tenbin_cache-${{ github.ref_name }}.tar.gz ../../../
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: tenbin_cache-${{ github.ref_name }}.tar.gz
+        body: |
+          ## Release ${{ github.ref_name }}
+
+          ### Installation
+          ```bash
+          tar -xzf tenbin_cache-${{ github.ref_name }}.tar.gz
+          ./tenbin_cache/bin/tenbin_cache start
+          ```
+
+          ### Changes
+          See [CHANGELOG.md](CHANGELOG.md) for details.
+        draft: false
+        prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') }}

@@ -251,7 +251,8 @@ defmodule TenbinCache.DNSWorker do
     {{y, m, d}, {hh, mm, ss}} = :calendar.local_time()
     {ms, _prec} = Time.utc_now().microsecond
 
-    file_name = "dns_packet-#{dir}-#{y}#{String.pad_leading("#{m}", 2, "0")}#{String.pad_leading("#{d}", 2, "0")}-#{String.pad_leading("#{hh}", 2, "0")}#{String.pad_leading("#{mm}", 2, "0")}#{String.pad_leading("#{ss}", 2, "0")}.#{ms}.bin"
+    file_name =
+      "dns_packet-#{dir}-#{y}#{String.pad_leading("#{m}", 2, "0")}#{String.pad_leading("#{d}", 2, "0")}-#{String.pad_leading("#{hh}", 2, "0")}#{String.pad_leading("#{mm}", 2, "0")}#{String.pad_leading("#{ss}", 2, "0")}.#{ms}.bin"
 
     file_path = Path.join(dump_dir, file_name)
 
