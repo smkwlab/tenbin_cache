@@ -282,7 +282,7 @@ defmodule TenbinCache.DNSWorker do
 
   # Safe DNS packet parsing with proper error handling
   defp safe_parse_packet(packet) do
-    DNSpacket.parse(packet) |> then(&{:ok, &1})
+    {:ok, DNSpacket.parse(packet)}
   rescue
     e in [FunctionClauseError, ArgumentError, MatchError, KeyError] ->
       {:error, e}
