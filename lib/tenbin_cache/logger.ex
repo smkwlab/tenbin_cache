@@ -164,7 +164,7 @@ defmodule TenbinCache.Logger do
 
   # Private functions
 
-  defp dns_logging_enabled?() do
+  defp dns_logging_enabled? do
     # First check Application environment (for tests)
     case Application.get_env(:tenbin_cache, :dns_query_logging) do
       nil ->
@@ -181,7 +181,7 @@ defmodule TenbinCache.Logger do
     end
   end
 
-  defp iso8601_timestamp() do
+  defp iso8601_timestamp do
     DateTime.utc_now()
     |> DateTime.to_iso8601()
   end
