@@ -180,7 +180,9 @@ defmodule TenbinCache.UDPServerTest do
     test "configures packet dumping when enabled in config" do
       # Ensure ConfigParser is running - restart if needed
       case Process.whereis(TenbinCache.ConfigParser) do
-        nil -> {:ok, _pid} = TenbinCache.ConfigParser.start_link([])
+        nil ->
+          {:ok, _pid} = TenbinCache.ConfigParser.start_link([])
+
         pid when is_pid(pid) ->
           if Process.alive?(pid) do
             :ok
@@ -216,7 +218,9 @@ defmodule TenbinCache.UDPServerTest do
     test "configures packet dumping as disabled when config is false" do
       # Ensure ConfigParser is running - restart if needed
       case Process.whereis(TenbinCache.ConfigParser) do
-        nil -> {:ok, _pid} = TenbinCache.ConfigParser.start_link([])
+        nil ->
+          {:ok, _pid} = TenbinCache.ConfigParser.start_link([])
+
         pid when is_pid(pid) ->
           if Process.alive?(pid) do
             :ok
