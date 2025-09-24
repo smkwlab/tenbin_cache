@@ -178,8 +178,16 @@ defmodule TenbinCache.UDPServerTest do
 
   describe "UDP Server packet dump configuration" do
     test "configures packet dumping when enabled in config" do
-      # Ensure ConfigParser is running
-      TestHelper.ensure_config_parser()
+      # Ensure ConfigParser is running - restart if needed
+      case Process.whereis(TenbinCache.ConfigParser) do
+        nil -> {:ok, _pid} = TenbinCache.ConfigParser.start_link([])
+        pid when is_pid(pid) ->
+          if Process.alive?(pid) do
+            :ok
+          else
+            {:ok, _pid} = TenbinCache.ConfigParser.start_link([])
+          end
+      end
 
       # Mock configuration with packet dumping enabled
       Agent.update(TenbinCache.ConfigParser, fn _ ->
@@ -206,8 +214,16 @@ defmodule TenbinCache.UDPServerTest do
     end
 
     test "configures packet dumping as disabled when config is false" do
-      # Ensure ConfigParser is running
-      TestHelper.ensure_config_parser()
+      # Ensure ConfigParser is running - restart if needed
+      case Process.whereis(TenbinCache.ConfigParser) do
+        nil -> {:ok, _pid} = TenbinCache.ConfigParser.start_link([])
+        pid when is_pid(pid) ->
+          if Process.alive?(pid) do
+            :ok
+          else
+            {:ok, _pid} = TenbinCache.ConfigParser.start_link([])
+          end
+      end
 
       # Mock configuration with packet dumping disabled
       Agent.update(TenbinCache.ConfigParser, fn _ ->
