@@ -221,77 +221,71 @@ defmodule TenbinCache.DNSWorker do
 
   # Extract query information from DNS packet
   defp extract_query_info(packet) do
-    try do
-      parsed = DNSpacket.parse(packet)
-      question = List.first(parsed.question) || %{}
-
+    with {:ok, parsed} <- safe_parse_packet(packet),
+         question <- List.first(parsed.question) || %{} do
       query_name = Map.get(question, :qname, "unknown")
       query_type = Map.get(question, :qtype, :UNKNOWN)
       query_class = Map.get(question, :qclass, :IN)
 
       {query_name, query_type, query_class}
-    rescue
-      FunctionClauseError ->
-        {"parse_error", :UNKNOWN, :IN}
-
-      ArgumentError ->
-        {"parse_error", :UNKNOWN, :IN}
-
-      e in [MatchError, KeyError] ->
-        Logger.debug("DNS packet parse error: #{inspect(e)}")
+    else
+      {:error, reason} ->
+        Logger.debug("DNS packet parse error: #{inspect(reason)}")
         {"parse_error", :UNKNOWN, :IN}
     end
   end
 
   # Extract response information from DNS packet
   defp extract_response_info(packet) do
-    try do
-      parsed = DNSpacket.parse(packet)
+    case safe_parse_packet(packet) do
+      {:ok, parsed} ->
+        response_code = get_response_code(parsed.rcode)
+        answer_count = length(parsed.answer || [])
+        response_data = extract_answer_data(parsed.answer)
 
-      # Extract response code
-      response_code =
-        case parsed.rcode do
-          0 -> "NOERROR"
-          1 -> "FORMERR"
-          2 -> "SERVFAIL"
-          3 -> "NXDOMAIN"
-          4 -> "NOTIMP"
-          5 -> "REFUSED"
-          _ -> "UNKNOWN"
-        end
+        {response_data, answer_count, response_code}
 
-      # Count answers
-      answer_count = length(parsed.answer || [])
-
-      # Extract answer data (simplified)
-      response_data =
-        parsed.answer
-        |> Enum.map(fn answer ->
-          case answer do
-            %{rdata: rdata} when is_tuple(rdata) ->
-              # Use Logger's format_ip_address function for proper IPv4/IPv6 handling
-              TenbinCache.Logger.format_ip_address(rdata)
-
-            %{rdata: rdata} when is_binary(rdata) ->
-              rdata
-
-            _ ->
-              "unknown"
-          end
-        end)
-
-      {response_data, answer_count, response_code}
-    rescue
-      FunctionClauseError ->
-        {[], 0, "PARSE_ERROR"}
-
-      ArgumentError ->
-        {[], 0, "PARSE_ERROR"}
-
-      e in [MatchError, KeyError] ->
-        Logger.debug("DNS response parse error: #{inspect(e)}")
+      {:error, reason} ->
+        Logger.debug("DNS response parse error: #{inspect(reason)}")
         {[], 0, "PARSE_ERROR"}
     end
+  end
+
+  # Extract response code from rcode value
+  defp get_response_code(rcode) do
+    case rcode do
+      0 -> "NOERROR"
+      1 -> "FORMERR"
+      2 -> "SERVFAIL"
+      3 -> "NXDOMAIN"
+      4 -> "NOTIMP"
+      5 -> "REFUSED"
+      _ -> "UNKNOWN"
+    end
+  end
+
+  # Extract answer data from answer list
+  defp extract_answer_data(answers) when is_list(answers) do
+    Enum.map(answers, &format_answer_rdata/1)
+  end
+
+  defp extract_answer_data(_), do: []
+
+  # Format individual answer record data
+  defp format_answer_rdata(%{rdata: rdata}) when is_tuple(rdata) do
+    # Use Logger's format_ip_address function for proper IPv4/IPv6 handling
+    TenbinCache.Logger.format_ip_address(rdata)
+  end
+
+  defp format_answer_rdata(%{rdata: rdata}) when is_binary(rdata), do: rdata
+  defp format_answer_rdata(_), do: "unknown"
+
+  # Safe DNS packet parsing with proper error handling
+  defp safe_parse_packet(packet) do
+    DNSpacket.parse(packet) |> then(&{:ok, &1})
+  rescue
+    e in [FunctionClauseError, ArgumentError, MatchError, KeyError] ->
+      {:error, e}
   end
 
   # Parse upstream forwarder address
