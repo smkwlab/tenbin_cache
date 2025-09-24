@@ -66,7 +66,12 @@ defmodule TenbinCache.DNSLoggingIntegrationTest do
 
       logs =
         capture_log([level: :info], fn ->
-          TenbinCache.Logger.log_dns_query_received({127, 0, 0, 1}, "app_env_enabled.com", :A, :IN)
+          TenbinCache.Logger.log_dns_query_received(
+            {127, 0, 0, 1},
+            "app_env_enabled.com",
+            :A,
+            :IN
+          )
         end)
 
       assert String.contains?(logs, "dns_query_received")
@@ -136,10 +141,12 @@ defmodule TenbinCache.DNSLoggingIntegrationTest do
       log_line = logs |> String.trim() |> String.split("\n") |> List.last()
 
       # Extract JSON from log line
-      json_part = case :binary.match(log_line, "{") do
-        :nomatch -> "{}"  # Fallback if no JSON found
-        {json_start, _} -> String.slice(log_line, json_start..-1//1)
-      end
+      json_part =
+        case :binary.match(log_line, "{") do
+          # Fallback if no JSON found
+          :nomatch -> "{}"
+          {json_start, _} -> String.slice(log_line, json_start..-1//1)
+        end
 
       # Validate JSON structure
       assert {:ok, parsed} = Jason.decode(json_part)

@@ -11,7 +11,12 @@ defmodule TenbinCache.LoggerTest do
 
       logs =
         capture_log([level: :info], fn ->
-          TenbinCache.Logger.log_dns_query_received(client_ip, query_name, query_type, query_class)
+          TenbinCache.Logger.log_dns_query_received(
+            client_ip,
+            query_name,
+            query_type,
+            query_class
+          )
         end)
 
       # Parse the JSON log entry
@@ -105,10 +110,12 @@ defmodule TenbinCache.LoggerTest do
       log_line = logs |> String.trim() |> String.split("\n") |> List.last()
 
       # Extract JSON part from log line (remove Elixir log prefix)
-      json_part = case :binary.match(log_line, "{") do
-        :nomatch -> "{}"  # Fallback if no JSON found
-        {json_start, _} -> String.slice(log_line, json_start..-1//1)
-      end
+      json_part =
+        case :binary.match(log_line, "{") do
+          # Fallback if no JSON found
+          :nomatch -> "{}"
+          {json_start, _} -> String.slice(log_line, json_start..-1//1)
+        end
 
       # Parse and validate JSON
       assert {:ok, parsed} = Jason.decode(json_part)
@@ -126,7 +133,7 @@ defmodule TenbinCache.LoggerTest do
     end
 
     test "handles IPv6 addresses correctly" do
-      ipv6_address = {0x2001, 0x0db8, 0x85a3, 0x0000, 0x0000, 0x8a2e, 0x0370, 0x7334}
+      ipv6_address = {0x2001, 0x0DB8, 0x85A3, 0x0000, 0x0000, 0x8A2E, 0x0370, 0x7334}
 
       logs =
         capture_log([level: :info], fn ->
@@ -147,10 +154,13 @@ defmodule TenbinCache.LoggerTest do
 
       # Verify the malicious content is properly escaped in JSON
       log_line = logs |> String.trim() |> String.split("\n") |> List.last()
-      json_part = case :binary.match(log_line, "{") do
-        :nomatch -> "{}"  # Fallback if no JSON found
-        {json_start, _} -> String.slice(log_line, json_start..-1//1)
-      end
+
+      json_part =
+        case :binary.match(log_line, "{") do
+          # Fallback if no JSON found
+          :nomatch -> "{}"
+          {json_start, _} -> String.slice(log_line, json_start..-1//1)
+        end
 
       assert {:ok, parsed} = Jason.decode(json_part)
       assert parsed["query_name"] == malicious_query
@@ -184,7 +194,8 @@ defmodule TenbinCache.LoggerTest do
 
       # Verify disabled logging is significantly faster (should be near-zero overhead)
       overhead_ratio = time_enabled / time_disabled
-      assert overhead_ratio < 300  # Should be reasonable overhead when enabled vs disabled
+      # Should be reasonable overhead when enabled vs disabled
+      assert overhead_ratio < 300
     end
   end
 end

@@ -78,7 +78,14 @@ defmodule TenbinCache.Logger do
       iex> TenbinCache.Logger.log_dns_response_sent({192, 168, 1, 100}, "example.com", "NOERROR", 1, ["93.184.216.34"], 15)
       :ok
   """
-  def log_dns_response_sent(client_ip, query_name, response_code, answer_count, response_data, processing_time_ms) do
+  def log_dns_response_sent(
+        client_ip,
+        query_name,
+        response_code,
+        answer_count,
+        response_data,
+        processing_time_ms
+      ) do
     if dns_logging_enabled?() do
       log_data = %{
         timestamp: iso8601_timestamp(),
@@ -165,9 +172,12 @@ defmodule TenbinCache.Logger do
         try do
           TenbinCache.ConfigParser.dns_query_logging_enabled?()
         catch
-          :exit, _ -> true  # Default to enabled if ConfigParser not available
+          # Default to enabled if ConfigParser not available
+          :exit, _ -> true
         end
-      value -> value
+
+      value ->
+        value
     end
   end
 
@@ -175,5 +185,4 @@ defmodule TenbinCache.Logger do
     DateTime.utc_now()
     |> DateTime.to_iso8601()
   end
-
 end

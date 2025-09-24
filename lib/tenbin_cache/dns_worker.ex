@@ -71,7 +71,12 @@ defmodule TenbinCache.DNSWorker do
 
         # Log successful DNS response
         TenbinCache.Logger.log_dns_response_sent(
-          host, query_name, response_code, answer_count, response_data, processing_time
+          host,
+          query_name,
+          response_code,
+          answer_count,
+          response_data,
+          processing_time
         )
 
         # Save outgoing packet and send response
@@ -226,8 +231,12 @@ defmodule TenbinCache.DNSWorker do
 
       {query_name, query_type, query_class}
     rescue
-      FunctionClauseError -> {"parse_error", :UNKNOWN, :IN}
-      ArgumentError -> {"parse_error", :UNKNOWN, :IN}
+      FunctionClauseError ->
+        {"parse_error", :UNKNOWN, :IN}
+
+      ArgumentError ->
+        {"parse_error", :UNKNOWN, :IN}
+
       e in [MatchError, KeyError] ->
         Logger.debug("DNS packet parse error: #{inspect(e)}")
         {"parse_error", :UNKNOWN, :IN}
@@ -240,35 +249,45 @@ defmodule TenbinCache.DNSWorker do
       parsed = DNSpacket.parse(packet)
 
       # Extract response code
-      response_code = case parsed.rcode do
-        0 -> "NOERROR"
-        1 -> "FORMERR"
-        2 -> "SERVFAIL"
-        3 -> "NXDOMAIN"
-        4 -> "NOTIMP"
-        5 -> "REFUSED"
-        _ -> "UNKNOWN"
-      end
+      response_code =
+        case parsed.rcode do
+          0 -> "NOERROR"
+          1 -> "FORMERR"
+          2 -> "SERVFAIL"
+          3 -> "NXDOMAIN"
+          4 -> "NOTIMP"
+          5 -> "REFUSED"
+          _ -> "UNKNOWN"
+        end
 
       # Count answers
       answer_count = length(parsed.answer || [])
 
       # Extract answer data (simplified)
-      response_data = parsed.answer
-      |> Enum.map(fn answer ->
-        case answer do
-          %{rdata: rdata} when is_tuple(rdata) ->
-            # Use Logger's format_ip_address function for proper IPv4/IPv6 handling
-            TenbinCache.Logger.format_ip_address(rdata)
-          %{rdata: rdata} when is_binary(rdata) -> rdata
-          _ -> "unknown"
-        end
-      end)
+      response_data =
+        parsed.answer
+        |> Enum.map(fn answer ->
+          case answer do
+            %{rdata: rdata} when is_tuple(rdata) ->
+              # Use Logger's format_ip_address function for proper IPv4/IPv6 handling
+              TenbinCache.Logger.format_ip_address(rdata)
+
+            %{rdata: rdata} when is_binary(rdata) ->
+              rdata
+
+            _ ->
+              "unknown"
+          end
+        end)
 
       {response_data, answer_count, response_code}
     rescue
-      FunctionClauseError -> {[], 0, "PARSE_ERROR"}
-      ArgumentError -> {[], 0, "PARSE_ERROR"}
+      FunctionClauseError ->
+        {[], 0, "PARSE_ERROR"}
+
+      ArgumentError ->
+        {[], 0, "PARSE_ERROR"}
+
       e in [MatchError, KeyError] ->
         Logger.debug("DNS response parse error: #{inspect(e)}")
         {[], 0, "PARSE_ERROR"}
