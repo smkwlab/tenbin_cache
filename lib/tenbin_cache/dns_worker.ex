@@ -285,7 +285,7 @@ defmodule TenbinCache.DNSWorker do
     {:ok, DNSpacket.parse(packet)}
   rescue
     e in [FunctionClauseError, ArgumentError, MatchError, KeyError] ->
-      {:error, e}
+      {:error, Exception.message(e)}
   end
 
   # Parse upstream forwarder address
